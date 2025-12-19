@@ -141,11 +141,22 @@ private:
         setsockopt(udp_send_fd_, SOL_SOCKET, SO_BROADCAST, 
                    &broadcast_enable, sizeof(broadcast_enable));
 
-        // 增大发送缓冲区 (2MB，防止高频丢包)
-        int send_buffer_size = 2 * 1024 * 1024;
+        // 增大发送缓冲区 (8MB，防止高频丢包)
+        int send_buffer_size = 8 * 1024 * 1024;
         if (setsockopt(udp_send_fd_, SOL_SOCKET, SO_SNDBUF, 
                        &send_buffer_size, sizeof(send_buffer_size)) < 0) {
-            RCLCPP_WARN(this->get_logger(), "Failed to set UDP send buffer size");
+            RCLCPP_ERROR(this->get_logger(), "Failed to set UDP send buffer size: %s", strerror(errno));
+        } else {
+            // 验证实际设置的buffer大小
+            int actual_size;
+            socklen_t len = sizeof(actual_size);
+            getsockopt(udp_send_fd_, SOL_SOCKET, SO_SNDBUF, &actual_size, &len);
+            RCLCPP_INFO(this->get_logger(), "UDP send buffer: requested=%d KB, actual=%d KB", 
+                       send_buffer_size/1024, actual_size/1024);
+            if (actual_size < send_buffer_size / 2) {
+                RCLCPP_WARN(this->get_logger(), 
+                           "Send buffer size too small! May cause packet loss. Run: sudo sysctl -w net.core.wmem_max=16777216");
+            }
         }
 
         // 设置广播目标地址
@@ -166,11 +177,24 @@ private:
         setsockopt(udp_recv_fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         setsockopt(udp_recv_fd_, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
 
-        // 增大接收缓冲区 (2MB，防止高频丢包)
-        int recv_buffer_size = 2 * 1024 * 1024;
+        // 增大接收缓冲区 (8MB，防止高频丢包) - 这是最关键的！
+        int recv_buffer_size = 8 * 1024 * 1024;
         if (setsockopt(udp_recv_fd_, SOL_SOCKET, SO_RCVBUF, 
                        &recv_buffer_size, sizeof(recv_buffer_size)) < 0) {
-            RCLCPP_WARN(this->get_logger(), "Failed to set UDP recv buffer size");
+            RCLCPP_ERROR(this->get_logger(), "Failed to set UDP recv buffer size: %s", strerror(errno));
+        } else {
+            // 验证实际设置的buffer大小
+            int actual_size;
+            socklen_t len = sizeof(actual_size);
+            getsockopt(udp_recv_fd_, SOL_SOCKET, SO_RCVBUF, &actual_size, &len);
+            RCLCPP_INFO(this->get_logger(), "UDP recv buffer: requested=%d KB, actual=%d KB", 
+                       recv_buffer_size/1024, actual_size/1024);
+            if (actual_size < recv_buffer_size / 2) {
+                RCLCPP_WARN(this->get_logger(), 
+                           "⚠️  CRITICAL: Recv buffer too small! Will cause 30%% packet loss at 100Hz!");
+                RCLCPP_WARN(this->get_logger(), 
+                           "⚠️  Solution: sudo sysctl -w net.core.rmem_max=16777216");
+            }
         }
 
         // 绑定端口
