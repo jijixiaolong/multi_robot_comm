@@ -271,10 +271,11 @@ private:
                 case MSG_VEHICLE_LOCAL_POSITION: {
                     auto pos_msg = std::make_shared<px4_msgs::msg::VehicleLocalPosition>();
                     int sender_id = -1;
-                    if (deserializePosition(buffer, recv_len, pos_msg, sender_id)) {
+                    std::string sender_name;
+                    if (deserializePosition(buffer, recv_len, pos_msg, sender_id, sender_name)) {
                         if (sender_id != robot_id_) {
                             // 获取或创建该 UAV 的发布者
-                            auto pub = getOrCreatePositionPublisher(sender_id);
+                            auto pub = getOrCreatePositionPublisher(sender_id, sender_name);
                             pub->publish(*pos_msg);
                         }
                     }
@@ -283,10 +284,11 @@ private:
                 case MSG_VEHICLE_ATTITUDE: {
                     auto att_msg = std::make_shared<px4_msgs::msg::VehicleAttitude>();
                     int sender_id = -1;
-                    if (deserializeAttitude(buffer, recv_len, att_msg, sender_id)) {
+                    std::string sender_name;
+                    if (deserializeAttitude(buffer, recv_len, att_msg, sender_id, sender_name)) {
                         if (sender_id != robot_id_) {
                             // 获取或创建该 UAV 的发布者
-                            auto pub = getOrCreateAttitudePublisher(sender_id);
+                            auto pub = getOrCreateAttitudePublisher(sender_id, sender_name);
                             pub->publish(*att_msg);
                         }
                     }
@@ -302,7 +304,7 @@ private:
     // 动态发布者获取/创建函数
     // ========================================================================
     rclcpp::Publisher<px4_msgs::msg::VehicleLocalPosition>::SharedPtr 
-    getOrCreatePositionPublisher(int sender_id)
+    getOrCreatePositionPublisher(int sender_id, const std::string& sender_name)
     {
         std::lock_guard<std::mutex> lock(pub_mutex_);
         
@@ -311,8 +313,8 @@ private:
             return position_pubs_[sender_id];
         }
         
-        // 创建新的发布者
-        std::string topic = "/uav" + std::to_string(sender_id) + "/fmu/out/vehicle_local_position";
+        // 创建新的发布者，使用实际的 sender_name
+        std::string topic = "/" + sender_name + "/fmu/out/vehicle_local_position";
         auto pub = this->create_publisher<px4_msgs::msg::VehicleLocalPosition>(topic, 10);
         position_pubs_[sender_id] = pub;
         
@@ -321,7 +323,7 @@ private:
     }
     
     rclcpp::Publisher<px4_msgs::msg::VehicleAttitude>::SharedPtr 
-    getOrCreateAttitudePublisher(int sender_id)
+    getOrCreateAttitudePublisher(int sender_id, const std::string& sender_name)
     {
         std::lock_guard<std::mutex> lock(pub_mutex_);
         
@@ -330,8 +332,8 @@ private:
             return attitude_pubs_[sender_id];
         }
         
-        // 创建新的发布者
-        std::string topic = "/uav" + std::to_string(sender_id) + "/fmu/out/vehicle_attitude";
+        // 创建新的发布者，使用实际的 sender_name
+        std::string topic = "/" + sender_name + "/fmu/out/vehicle_attitude";
         auto pub = this->create_publisher<px4_msgs::msg::VehicleAttitude>(topic, 10);
         attitude_pubs_[sender_id] = pub;
         
@@ -351,6 +353,13 @@ private:
 
         *((int32_t*)ptr) = robot_id_;
         ptr += sizeof(int32_t);
+
+        // 添加 UAV 名称（固定32字节，包含字符串长度和内容）
+        uint32_t name_len = uav_name_.length();
+        *((uint32_t*)ptr) = name_len;
+        ptr += sizeof(uint32_t);
+        memcpy(ptr, uav_name_.c_str(), name_len);
+        ptr += 28; // 固定跳过28字节保证对齐（最多支持28字符的UAV名称）
 
         *((uint64_t*)ptr) = msg->timestamp;
         ptr += sizeof(uint64_t);
@@ -373,14 +382,26 @@ private:
         return ptr - buffer;
     }
 
+
     bool deserializePosition(const char* buffer, int len, 
-                             px4_msgs::msg::VehicleLocalPosition::SharedPtr& msg, int& sender_id)
+                             px4_msgs::msg::VehicleLocalPosition::SharedPtr& msg, 
+                             int& sender_id, std::string& sender_name)
     {
         const char* ptr = buffer;
         ptr += sizeof(MESSAGE_TYPE);
 
         sender_id = *((int32_t*)ptr);
         ptr += sizeof(int32_t);
+
+        // 解析 UAV 名称
+        uint32_t name_len = *((uint32_t*)ptr);
+        ptr += sizeof(uint32_t);
+        if (name_len > 0 && name_len < 28) {
+            sender_name = std::string(ptr, name_len);
+        } else {
+            sender_name = "uav" + std::to_string(sender_id); // 兼容旧版本
+        }
+        ptr += 28; // 固定跳过28字节
 
         msg->timestamp = *((uint64_t*)ptr);
         ptr += sizeof(uint64_t);
@@ -403,6 +424,7 @@ private:
         return true;
     }
 
+
     // ========================================================================
     // 序列化 VehicleAttitude
     // ========================================================================
@@ -416,6 +438,13 @@ private:
         *((int32_t*)ptr) = robot_id_;
         ptr += sizeof(int32_t);
 
+        // 添加 UAV 名称（固定32字节，包含字符串长度和内容）
+        uint32_t name_len = uav_name_.length();
+        *((uint32_t*)ptr) = name_len;
+        ptr += sizeof(uint32_t);
+        memcpy(ptr, uav_name_.c_str(), name_len);
+        ptr += 28; // 固定跳过28字节保证对齐
+
         *((uint64_t*)ptr) = msg->timestamp;
         ptr += sizeof(uint64_t);
 
@@ -427,14 +456,26 @@ private:
         return ptr - buffer;
     }
 
+
     bool deserializeAttitude(const char* buffer, int len, 
-                             px4_msgs::msg::VehicleAttitude::SharedPtr& msg, int& sender_id)
+                             px4_msgs::msg::VehicleAttitude::SharedPtr& msg, 
+                             int& sender_id, std::string& sender_name)
     {
         const char* ptr = buffer;
         ptr += sizeof(MESSAGE_TYPE);
 
         sender_id = *((int32_t*)ptr);
         ptr += sizeof(int32_t);
+
+        // 解析 UAV 名称
+        uint32_t name_len = *((uint32_t*)ptr);
+        ptr += sizeof(uint32_t);
+        if (name_len > 0 && name_len < 28) {
+            sender_name = std::string(ptr, name_len);
+        } else {
+            sender_name = "uav" + std::to_string(sender_id); // 兼容旧版本
+        }
+        ptr += 28; // 固定跳过28字节
 
         msg->timestamp = *((uint64_t*)ptr);
         ptr += sizeof(uint64_t);
@@ -446,6 +487,7 @@ private:
 
         return true;
     }
+
 
     // ========================================================================
     // 成员变量

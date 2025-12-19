@@ -37,7 +37,7 @@ source install/setup.bash
 ```bash
 ros2 launch multi_robot_comm comm_bridge.launch.py \
     robot_id:=1 \
-    uav_name:=uav1 \
+    uav_name:=uav_1 \
     broadcast_ip:=10.220.45.255
 ```
 
@@ -45,7 +45,7 @@ ros2 launch multi_robot_comm comm_bridge.launch.py \
 ```bash
 ros2 launch multi_robot_comm comm_bridge.launch.py \
     robot_id:=2 \
-    uav_name:=uav2 \
+    uav_name:=uav_2 \
     broadcast_ip:=10.220.45.255
 ```
 
@@ -53,7 +53,7 @@ ros2 launch multi_robot_comm comm_bridge.launch.py \
 ```bash
 ros2 launch multi_robot_comm comm_bridge.launch.py \
     robot_id:=3 \
-    uav_name:=uav3 \
+    uav_name:=uav_3 \
     broadcast_ip:=10.220.45.255
 ```
 
@@ -64,18 +64,18 @@ ros2 launch multi_robot_comm comm_bridge.launch.py \
 ros2 topic list | grep fmu
 
 # 应该看到：
-# /uav1/fmu/out/vehicle_local_position
-# /uav1/fmu/out/vehicle_attitude
-# /uav2/fmu/out/vehicle_local_position  # 自动创建
-# /uav2/fmu/out/vehicle_attitude        # 自动创建
-# /uav3/fmu/out/vehicle_local_position  # 自动创建
-# /uav3/fmu/out/vehicle_attitude        # 自动创建
+# /uav_1/fmu/out/vehicle_local_position
+# /uav_1/fmu/out/vehicle_attitude
+# /uav_2/fmu/out/vehicle_local_position  # 自动创建
+# /uav_2/fmu/out/vehicle_attitude        # 自动创建
+# /uav_3/fmu/out/vehicle_local_position  # 自动创建
+# /uav_3/fmu/out/vehicle_attitude        # 自动创建
 ```
 
 监听远程 UAV 数据：
 ```bash
 # 在 UAV1 上监听 UAV2 的位置
-ros2 topic echo /uav2/fmu/out/vehicle_local_position
+ros2 topic echo /uav_2/fmu/out/vehicle_local_position
 ```
 
 ## 参数说明
@@ -83,7 +83,7 @@ ros2 topic echo /uav2/fmu/out/vehicle_local_position
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `robot_id` | 1 | 本机 UAV 唯一 ID（1, 2, 3, ...） |
-| `uav_name` | uav1 | 本机 UAV 名称（uav1, uav2, uav3, ...） |
+| `uav_name` | uav_1 | 本机 UAV 名称（uav_1, uav_2, uav_3, ...）支持下划线 |
 | `broadcast_ip` | 127.0.0.255 | UDP 广播地址（如 `10.220.45.255`） |
 | `broadcast_freq` | 50.0 | 广播频率 (Hz) |
 | `position_topic_suffix` | /fmu/out/vehicle_local_position | 位置话题后缀 |
