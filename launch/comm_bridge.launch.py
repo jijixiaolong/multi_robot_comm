@@ -36,7 +36,7 @@ def generate_launch_description():
     
     broadcast_freq_arg = DeclareLaunchArgument(
         'broadcast_freq',
-        default_value='50.0',
+        default_value='100.0',
         description='Broadcast frequency in Hz'
     )
 

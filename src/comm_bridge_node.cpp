@@ -141,6 +141,13 @@ private:
         setsockopt(udp_send_fd_, SOL_SOCKET, SO_BROADCAST, 
                    &broadcast_enable, sizeof(broadcast_enable));
 
+        // 增大发送缓冲区 (2MB，防止高频丢包)
+        int send_buffer_size = 2 * 1024 * 1024;
+        if (setsockopt(udp_send_fd_, SOL_SOCKET, SO_SNDBUF, 
+                       &send_buffer_size, sizeof(send_buffer_size)) < 0) {
+            RCLCPP_WARN(this->get_logger(), "Failed to set UDP send buffer size");
+        }
+
         // 设置广播目标地址
         memset(&udp_broadcast_addr_, 0, sizeof(udp_broadcast_addr_));
         udp_broadcast_addr_.sin_family = AF_INET;
@@ -158,6 +165,13 @@ private:
         int reuse = 1;
         setsockopt(udp_recv_fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         setsockopt(udp_recv_fd_, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+
+        // 增大接收缓冲区 (2MB，防止高频丢包)
+        int recv_buffer_size = 2 * 1024 * 1024;
+        if (setsockopt(udp_recv_fd_, SOL_SOCKET, SO_RCVBUF, 
+                       &recv_buffer_size, sizeof(recv_buffer_size)) < 0) {
+            RCLCPP_WARN(this->get_logger(), "Failed to set UDP recv buffer size");
+        }
 
         // 绑定端口
         struct sockaddr_in recv_addr;
@@ -179,12 +193,11 @@ private:
     // ========================================================================
     void positionCallback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg)
     {
-        static rclcpp::Time last_time = this->now();
         rclcpp::Time now = this->now();
-        if ((now - last_time).seconds() < 1.0 / broadcast_freq_) {
+        if ((now - last_position_time_).seconds() < 1.0 / broadcast_freq_) {
             return;
         }
-        last_time = now;
+        last_position_time_ = now;
 
         char buffer[BUF_LEN];
         int len = serializePosition(msg, buffer);
@@ -199,12 +212,11 @@ private:
     // ========================================================================
     void attitudeCallback(const px4_msgs::msg::VehicleAttitude::SharedPtr msg)
     {
-        static rclcpp::Time last_time = this->now();
         rclcpp::Time now = this->now();
-        if ((now - last_time).seconds() < 1.0 / broadcast_freq_) {
+        if ((now - last_attitude_time_).seconds() < 1.0 / broadcast_freq_) {
             return;
         }
-        last_time = now;
+        last_attitude_time_ = now;
 
         char buffer[BUF_LEN];
         int len = serializeAttitude(msg, buffer);
@@ -440,6 +452,10 @@ private:
     
     // UAV 名称
     std::string uav_name_;
+    
+    // 频率控制时间戳（修复bug：分离两个回调的时间戳）
+    rclcpp::Time last_position_time_{0, 0, RCL_ROS_TIME};
+    rclcpp::Time last_attitude_time_{0, 0, RCL_ROS_TIME};
 };
 
 
